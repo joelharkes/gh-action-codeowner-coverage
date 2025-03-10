@@ -1,17 +1,20 @@
 import * as core from '@actions/core';
 import * as glob from '@actions/glob';
 import { readFileSync, existsSync } from 'fs';
+import { parseCodeowners } from './codeowner.js';
 
 interface Input {
   'include-gitignore': boolean;
   'ignore-default': boolean;
   files: string;
+  allRulesMustHit: boolean;
 }
 
 function getInputs(): Input {
   const result = {} as Input;
   result['include-gitignore'] = getBoolInput('include-gitignore');
   result['ignore-default'] = getBoolInput('ignore-default');
+  result.allRulesMustHit = getBoolInput('allRulesMustHit');
   result.files = core.getInput('files');
   return result;
 }
@@ -25,61 +28,67 @@ export const runAction = async (input: Input): Promise<void> => {
   core.startGroup(`Loading files to check.`);
   if (input.files) {
     filesToCheck = input.files.split(' ');
-    filesToCheck = await (await glob.create(filesToCheck.join('\n'))).glob();
   } else {
     filesToCheck = await (await glob.create('*')).glob();
+    if (input['include-gitignore'] === true) {
+      core.info('Ignoring .gitignored files');
+      let gitIgnoreFiles: string[] = [];
+      if (!existsSync('.gitignore')) {
+        core.warning('No .gitignore file found, skipping check.');
+      } else {
+        const gitIgnoreBuffer = readFileSync('.gitignore', 'utf8');
+        const gitIgnoreGlob = await glob.create(gitIgnoreBuffer);
+        gitIgnoreFiles = await gitIgnoreGlob.glob();
+        core.info(`.gitignore Files: ${gitIgnoreFiles.length}`);
+        const lengthBefore = filesToCheck.length;
+        filesToCheck = filesToCheck.filter(
+          (file) => !gitIgnoreFiles.includes(file),
+        );
+        const filesIgnored = lengthBefore - filesToCheck.length;
+        core.info(`Files Ignored: ${filesIgnored}`);
+      }
+    }
   }
-  // core.info(JSON.stringify(filesToCheck));
+  core.info(`Found ${filesToCheck.length} files to check.`);
+  if (core.isDebug()) {
+    core.debug(filesToCheck.join('\n'));
+  }
   core.endGroup();
 
-  core.startGroup('Reading CODEOWNERS File');
+  core.startGroup('Parsing CODEOWNERS File');
   const codeownerContent = getCodeownerContent();
-  let codeownerFileGlobs = codeownerContent
-    .split('\n')
-    .map((line) => line.split(' ')[0])
-    .filter((file) => !file.startsWith('#'))
-    .map((file) => file.replace(/^\//, ''));
+  let parsedCodeowners = parseCodeowners(codeownerContent);
   if (input['ignore-default'] === true) {
-    codeownerFileGlobs = codeownerFileGlobs.filter((file) => file !== '*');
+    parsedCodeowners = parsedCodeowners.filter((rule) => rule.pattern !== '*');
   }
-  const codeownersGlob = await glob.create(codeownerFileGlobs.join('\n'));
-  let codeownersFiles = await codeownersGlob.glob();
-  // core.info(JSON.stringify(codeownersFiles));
+  core.info(`CODEOWNERS Rules: ${parsedCodeowners.length}`);
   core.endGroup();
 
   core.startGroup('Matching CODEOWNER Files with found files');
-  codeownersFiles = codeownersFiles.filter((file) =>
-    filesToCheck.includes(file),
-  );
-  core.info(`CODEOWNER Files in All Files: ${codeownersFiles.length}`);
-  core.info(JSON.stringify(codeownersFiles));
+  const rulesResult = parsedCodeowners.map((rule) => ({
+    rule,
+    filtes: [] as string[],
+  }));
+  rulesResult.reverse(); // last rule takes precedence.
+  const missedFiles: string[] = [];
+  filesToCheck.forEach((file) => {
+    const matchedRule = rulesResult.find(({ rule }) => rule.isMatch(file));
+    if (matchedRule) {
+      matchedRule.filtes.push(file);
+    } else {
+      missedFiles.push(file);
+    }
+  });
+
+  core.info(`${missedFiles.length} files missing codeowners`);
+  if (core.isDebug()) {
+    core.debug(JSON.stringify(missedFiles));
+  }
   core.endGroup();
 
-  if (input['include-gitignore'] === true) {
-    core.startGroup('Ignoring .gitignored files');
-    let gitIgnoreFiles: string[] = [];
-    if (!existsSync('.gitignore')) {
-      core.warning('No .gitignore file found');
-    } else {
-      const gitIgnoreBuffer = readFileSync('.gitignore', 'utf8');
-      const gitIgnoreGlob = await glob.create(gitIgnoreBuffer);
-      gitIgnoreFiles = await gitIgnoreGlob.glob();
-      core.info(`.gitignore Files: ${gitIgnoreFiles.length}`);
-      const lengthBefore = filesToCheck.length;
-      filesToCheck = filesToCheck.filter(
-        (file) => !gitIgnoreFiles.includes(file),
-      );
-      const filesIgnored = lengthBefore - filesToCheck.length;
-      core.info(`Files Ignored: ${filesIgnored}`);
-    }
-    core.endGroup();
-  }
-
   core.startGroup('Checking CODEOWNERS Coverage');
-  const filesNotCovered = filesToCheck.filter(
-    (file) => !codeownersFiles.includes(file),
-  );
-  const amountCovered = filesToCheck.length - filesNotCovered.length;
+
+  const amountCovered = filesToCheck.length - missedFiles.length;
 
   const coveragePercent =
     filesToCheck.length === 0
@@ -92,17 +101,30 @@ export const runAction = async (input: Input): Promise<void> => {
   });
   core.endGroup();
   core.startGroup('Annotating files');
-  filesNotCovered.forEach((file) =>
+  missedFiles.forEach((file) =>
     core.error(`File not covered by CODEOWNERS: ${file}`, {
       title: 'File mssing in CODEOWNERS',
       file: file,
     }),
   );
   core.endGroup();
-  if (filesNotCovered.length > 0) {
+  if (missedFiles.length > 0) {
     core.setFailed(
-      `${filesNotCovered.length}/${filesToCheck.length} files not covered in CODEOWNERS`,
+      `${missedFiles.length}/${filesToCheck.length} files not covered in CODEOWNERS`,
     );
+  }
+  if (input.allRulesMustHit) {
+    const unusedRules = rulesResult.filter(({ filtes }) => filtes.length === 0);
+    if (unusedRules.length > 0) {
+      core.setFailed(`${unusedRules.length} rules not used`);
+    }
+    unusedRules.forEach(({ rule }) => {
+      core.error(`Rule not used: ${rule.pattern}`, {
+        title: 'Rule not used',
+        file: 'CODEOWNERS',
+        startLine: rule.lineNumber,
+      });
+    });
   }
 };
 

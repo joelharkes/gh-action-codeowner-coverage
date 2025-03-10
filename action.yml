@@ -5,8 +5,8 @@ author: joelharkes
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.
 branding:
-  icon: heart
-  color: red
+  icon: align-left
+  color: white
 
 # Define your inputs here.
 inputs:
@@ -21,6 +21,10 @@ inputs:
   files:
     description: Files to check, can be used to only check git modified files.
     required: false
+  allRulesMustHit:
+    description: Wether all rules must hit for the action to pass. Do not use when using files input to check only modified files.
+    required: false
+    default: 'false'
 
 # Define your outputs here.
 outputs:
