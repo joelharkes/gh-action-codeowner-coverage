@@ -57,7 +57,7 @@ jobs:
         id: test-action
         uses: ./
         with:
-          ignore-default: true
+          ignoreDefault: true
 
       - name: Print Output
         id: output

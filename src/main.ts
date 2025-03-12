@@ -4,21 +4,21 @@ import { readFileSync, existsSync } from 'fs';
 import { parseCodeowners } from './codeowner.js';
 
 interface Input {
-  'include-gitignore': boolean;
-  'ignore-default': boolean;
+  includeGitignore: boolean;
+  ignoreDefault: boolean;
   files: string;
   allRulesMustHit: boolean;
   codeownersContent?: string;
 }
 
 function getInputs(): Input {
-  const result = {} as Input;
-  result['include-gitignore'] = getBoolInput('include-gitignore');
-  result['ignore-default'] = getBoolInput('ignore-default');
-  result.allRulesMustHit = getBoolInput('allRulesMustHit');
-  result.files = core.getInput('files');
-  result.codeownersContent = core.getInput('codeownersContent');
-  return result;
+  return {
+    includeGitignore: getBoolInput('includeGitignore'),
+    ignoreDefault: getBoolInput('ignoreDefault'),
+    allRulesMustHit: getBoolInput('allRulesMustHit'),
+    files: core.getInput('files'),
+    codeownersContent: core.getInput('codeownersContent'),
+  };
 }
 
 function getBoolInput(name: string): boolean {
@@ -34,7 +34,7 @@ export const runAction = async (input: Input): Promise<void> => {
       .map((file) => (file.startsWith('/') ? file : `/${file}`));
   } else {
     filesToCheck = await (await glob.create('*')).glob();
-    if (input['include-gitignore'] === true) {
+    if (input['includeGitignore'] === true) {
       core.info('Ignoring .gitignored files');
       let gitIgnoreFiles: string[] = [];
       if (!existsSync('.gitignore')) {
@@ -62,7 +62,7 @@ export const runAction = async (input: Input): Promise<void> => {
   core.startGroup('Parsing CODEOWNERS File');
   const codeownerContent = input.codeownersContent || getCodeownerContent();
   let parsedCodeowners = parseCodeowners(codeownerContent);
-  if (input['ignore-default'] === true) {
+  if (input['ignoreDefault'] === true) {
     parsedCodeowners = parsedCodeowners.filter((rule) => rule.pattern !== '*');
   }
   core.info(`CODEOWNERS Rules: ${parsedCodeowners.length}`);

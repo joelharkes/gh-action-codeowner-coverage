@@ -18,8 +18,8 @@ const { runAction } = await import('../src/main.js');
 test('run action', async () => {
   core.isDebug.mockReturnValue(false);
   return runAction({
-    'include-gitignore': false,
-    'ignore-default': false,
+    includeGitignore: false,
+    ignoreDefault: false,
     files: '',
     allRulesMustHit: false,
   });

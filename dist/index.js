@@ -29805,13 +29805,13 @@ function makeMatcher(pattern) {
 }
 
 function getInputs() {
-    const result = {};
-    result['include-gitignore'] = getBoolInput('include-gitignore');
-    result['ignore-default'] = getBoolInput('ignore-default');
-    result.allRulesMustHit = getBoolInput('allRulesMustHit');
-    result.files = coreExports.getInput('files');
-    result.codeownersContent = coreExports.getInput('codeownersContent');
-    return result;
+    return {
+        includeGitignore: getBoolInput('includeGitignore'),
+        ignoreDefault: getBoolInput('ignoreDefault'),
+        allRulesMustHit: getBoolInput('allRulesMustHit'),
+        files: coreExports.getInput('files'),
+        codeownersContent: coreExports.getInput('codeownersContent'),
+    };
 }
 function getBoolInput(name) {
     return coreExports.getInput(name)?.toLowerCase() === 'true';
@@ -29826,7 +29826,7 @@ const runAction = async (input) => {
     }
     else {
         filesToCheck = await (await globExports.create('*')).glob();
-        if (input['include-gitignore'] === true) {
+        if (input['includeGitignore'] === true) {
             coreExports.info('Ignoring .gitignored files');
             let gitIgnoreFiles = [];
             if (!existsSync('.gitignore')) {
@@ -29852,7 +29852,7 @@ const runAction = async (input) => {
     coreExports.startGroup('Parsing CODEOWNERS File');
     const codeownerContent = input.codeownersContent || getCodeownerContent();
     let parsedCodeowners = parseCodeowners(codeownerContent);
-    if (input['ignore-default'] === true) {
+    if (input['ignoreDefault'] === true) {
         parsedCodeowners = parsedCodeowners.filter((rule) => rule.pattern !== '*');
     }
     coreExports.info(`CODEOWNERS Rules: ${parsedCodeowners.length}`);

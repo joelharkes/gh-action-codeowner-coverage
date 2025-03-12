@@ -10,11 +10,11 @@ branding:
 
 # Define your inputs here.
 inputs:
-  include-gitignore:
+  includeGitignore:
     description: Wether or not to exclude files from .gitignore.
     required: false
     default: 'false'
-  ignore-default:
+  ignoreDefault:
     description: Wether to ignore the default * CODEOWNERS line.
     required: false
     default: 'false'

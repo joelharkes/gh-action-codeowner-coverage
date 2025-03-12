@@ -1,6 +1,6 @@
 interface Input {
-    'include-gitignore': boolean;
-    'ignore-default': boolean;
+    includeGitignore: boolean;
+    ignoreDefault: boolean;
     files: string;
     allRulesMustHit: boolean;
     codeownersContent?: string;
