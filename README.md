@@ -78,5 +78,5 @@ steps:
 
 ### Contributing
 
-See: [typescript-action template](https://github.com/actions/typescript-action) on how to run, test and
-contribute to GitHub Actions.
+See: [typescript-action template](https://github.com/actions/typescript-action)
+on how to run, test and contribute to GitHub Actions.
