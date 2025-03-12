@@ -8,6 +8,7 @@ interface Input {
   'ignore-default': boolean;
   files: string;
   allRulesMustHit: boolean;
+  codeownersContent?: string;
 }
 
 function getInputs(): Input {
@@ -16,6 +17,7 @@ function getInputs(): Input {
   result['ignore-default'] = getBoolInput('ignore-default');
   result.allRulesMustHit = getBoolInput('allRulesMustHit');
   result.files = core.getInput('files');
+  result.codeownersContent = core.getInput('codeownersContent');
   return result;
 }
 
@@ -27,7 +29,7 @@ export const runAction = async (input: Input): Promise<void> => {
   let filesToCheck: string[] = [];
   core.startGroup(`Loading files to check.`);
   if (input.files) {
-    filesToCheck = input.files.split(' ');
+    filesToCheck = input.files.split(' ').map((file) => file.startsWith('/') ? file : `/${file}`);
   } else {
     filesToCheck = await (await glob.create('*')).glob();
     if (input['include-gitignore'] === true) {
@@ -56,7 +58,7 @@ export const runAction = async (input: Input): Promise<void> => {
   core.endGroup();
 
   core.startGroup('Parsing CODEOWNERS File');
-  const codeownerContent = getCodeownerContent();
+  const codeownerContent = input.codeownersContent || getCodeownerContent();
   let parsedCodeowners = parseCodeowners(codeownerContent);
   if (input['ignore-default'] === true) {
     parsedCodeowners = parsedCodeowners.filter((rule) => rule.pattern !== '*');

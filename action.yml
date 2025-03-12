@@ -25,6 +25,9 @@ inputs:
     description: Wether all rules must hit for the action to pass. Do not use when using files input to check only modified files.
     required: false
     default: 'false'
+  codeownersContent:
+    description: The content of the CODEOWNERS file. If not provided, the action will look for a CODEOWNERS file in the repository.
+    required: false
 
 # Define your outputs here.
 outputs:
