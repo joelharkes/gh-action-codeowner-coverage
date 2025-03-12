@@ -1,0 +1,30 @@
+name: CODEOWNERS Check on modified files
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  codeowners:
+    runs-on: ubuntu-latest
+    name: Test changed-files
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v45
+
+      - name: CODEOWNERS Check
+        id: test-action
+        uses: joelharkes/gh-action-codeowner-coverage@v1
+        with:
+          files: ${{ steps.changed-files.outputs.all_changed_files }}
+          includeGitignore: 'false'
+          ignoreDefault: 'false'
