@@ -35,6 +35,9 @@ inputs:
 
 # Define your outputs here.
 outputs:
+  missedFiles:
+    description:
+      The files that are not covered by the CODEOWNERS file, separated by a \n.
 
 runs:
   using: node20

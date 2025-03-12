@@ -29897,6 +29897,7 @@ const runAction = async (input) => {
     if (missedFiles.length > 0) {
         coreExports.setFailed(`${missedFiles.length}/${filesToCheck.length} files not covered in CODEOWNERS`);
     }
+    coreExports.setOutput('missedFiles', missedFiles.join('\n'));
     if (input.allRulesMustHit) {
         const unusedRules = rulesResult.filter(({ filtes }) => filtes.length === 0);
         if (unusedRules.length > 0) {

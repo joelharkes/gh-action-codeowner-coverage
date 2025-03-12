@@ -116,6 +116,7 @@ export const runAction = async (input: Input): Promise<void> => {
       `${missedFiles.length}/${filesToCheck.length} files not covered in CODEOWNERS`,
     );
   }
+  core.setOutput('missedFiles', missedFiles.join('\n'));
   if (input.allRulesMustHit) {
     const unusedRules = rulesResult.filter(({ filtes }) => filtes.length === 0);
     if (unusedRules.length > 0) {
