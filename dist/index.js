@@ -29752,11 +29752,65 @@ function requireGlob () {
 
 var globExports = requireGlob();
 
+function parseCodeowners(content) {
+    const lines = content.split('\n');
+    const rules = [];
+    lines.forEach((line, index) => {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) {
+            return;
+        }
+        if (trimmedLine.startsWith('#')) {
+            return;
+        }
+        const [pattern, ...owners] = trimmedLine.split(/\s+/);
+        rules.push({
+            pattern,
+            owners,
+            isMatch: makeMatcher(pattern),
+            lineNumber: index + 1,
+        });
+    });
+    return rules;
+}
+function makeMatcher(pattern) {
+    if (pattern === '*') {
+        return () => true;
+    }
+    if (!pattern.includes('*')) {
+        if (pattern.startsWith('/')) {
+            return (file) => file.startsWith(pattern);
+        }
+        return (file) => file.includes(pattern);
+    }
+    if (!pattern.includes('/') && pattern.startsWith('*')) {
+        return (file) => file.endsWith(pattern.slice(1));
+    }
+    if (!pattern.startsWith('/') && !pattern.startsWith('*')) {
+        pattern = `**/` + pattern; // we match preceding directory
+    }
+    if (!pattern.endsWith('*')) {
+        pattern = pattern + '**'; // we match all subdirectories (we are never sure if we match specific file or directory)
+    }
+    // Escape special regex characters
+    let regexPattern = pattern.replace(/[-/\\^$+?.()|[\]{}*]/g, '\\$&');
+    // Replace ** with a pattern that matches any character, including slashes
+    regexPattern = regexPattern.replace(/\\\*\\\*/g, '.*');
+    // Replace * with a pattern that matches any character except slashes
+    regexPattern = regexPattern.replace(/\\\*/g, '[^/]*');
+    // Ensure the pattern matches from the start to the end of the string
+    regexPattern = `^${regexPattern}$`;
+    const regex = new RegExp(regexPattern);
+    return (file) => regex.test(file);
+}
+
 function getInputs() {
     const result = {};
     result['include-gitignore'] = getBoolInput('include-gitignore');
     result['ignore-default'] = getBoolInput('ignore-default');
+    result.allRulesMustHit = getBoolInput('allRulesMustHit');
     result.files = coreExports.getInput('files');
+    result.codeownersContent = coreExports.getInput('codeownersContent');
     return result;
 }
 function getBoolInput(name) {
@@ -29766,54 +29820,66 @@ const runAction = async (input) => {
     let filesToCheck = [];
     coreExports.startGroup(`Loading files to check.`);
     if (input.files) {
-        filesToCheck = input.files.split(' ');
-        filesToCheck = await (await globExports.create(filesToCheck.join('\n'))).glob();
+        filesToCheck = input.files
+            .split(' ')
+            .map((file) => (file.startsWith('/') ? file : `/${file}`));
     }
     else {
         filesToCheck = await (await globExports.create('*')).glob();
+        if (input['include-gitignore'] === true) {
+            coreExports.info('Ignoring .gitignored files');
+            let gitIgnoreFiles = [];
+            if (!existsSync('.gitignore')) {
+                coreExports.warning('No .gitignore file found, skipping check.');
+            }
+            else {
+                const gitIgnoreBuffer = readFileSync('.gitignore', 'utf8');
+                const gitIgnoreGlob = await globExports.create(gitIgnoreBuffer);
+                gitIgnoreFiles = await gitIgnoreGlob.glob();
+                coreExports.info(`.gitignore Files: ${gitIgnoreFiles.length}`);
+                const lengthBefore = filesToCheck.length;
+                filesToCheck = filesToCheck.filter((file) => !gitIgnoreFiles.includes(file));
+                const filesIgnored = lengthBefore - filesToCheck.length;
+                coreExports.info(`Files Ignored: ${filesIgnored}`);
+            }
+        }
     }
-    // core.info(JSON.stringify(filesToCheck));
+    coreExports.info(`Found ${filesToCheck.length} files to check.`);
+    if (coreExports.isDebug()) {
+        coreExports.debug(filesToCheck.join('\n'));
+    }
     coreExports.endGroup();
-    coreExports.startGroup('Reading CODEOWNERS File');
-    const codeownerContent = getCodeownerContent();
-    let codeownerFileGlobs = codeownerContent
-        .split('\n')
-        .map((line) => line.split(' ')[0])
-        .filter((file) => !file.startsWith('#'))
-        .map((file) => file.replace(/^\//, ''));
+    coreExports.startGroup('Parsing CODEOWNERS File');
+    const codeownerContent = input.codeownersContent || getCodeownerContent();
+    let parsedCodeowners = parseCodeowners(codeownerContent);
     if (input['ignore-default'] === true) {
-        codeownerFileGlobs = codeownerFileGlobs.filter((file) => file !== '*');
+        parsedCodeowners = parsedCodeowners.filter((rule) => rule.pattern !== '*');
     }
-    const codeownersGlob = await globExports.create(codeownerFileGlobs.join('\n'));
-    let codeownersFiles = await codeownersGlob.glob();
-    // core.info(JSON.stringify(codeownersFiles));
+    coreExports.info(`CODEOWNERS Rules: ${parsedCodeowners.length}`);
     coreExports.endGroup();
     coreExports.startGroup('Matching CODEOWNER Files with found files');
-    codeownersFiles = codeownersFiles.filter((file) => filesToCheck.includes(file));
-    coreExports.info(`CODEOWNER Files in All Files: ${codeownersFiles.length}`);
-    coreExports.info(JSON.stringify(codeownersFiles));
-    coreExports.endGroup();
-    if (input['include-gitignore'] === true) {
-        coreExports.startGroup('Ignoring .gitignored files');
-        let gitIgnoreFiles = [];
-        if (!existsSync('.gitignore')) {
-            coreExports.warning('No .gitignore file found');
+    const rulesResult = parsedCodeowners.map((rule) => ({
+        rule,
+        filtes: [],
+    }));
+    rulesResult.reverse(); // last rule takes precedence.
+    const missedFiles = [];
+    filesToCheck.forEach((file) => {
+        const matchedRule = rulesResult.find(({ rule }) => rule.isMatch(file));
+        if (matchedRule) {
+            matchedRule.filtes.push(file);
         }
         else {
-            const gitIgnoreBuffer = readFileSync('.gitignore', 'utf8');
-            const gitIgnoreGlob = await globExports.create(gitIgnoreBuffer);
-            gitIgnoreFiles = await gitIgnoreGlob.glob();
-            coreExports.info(`.gitignore Files: ${gitIgnoreFiles.length}`);
-            const lengthBefore = filesToCheck.length;
-            filesToCheck = filesToCheck.filter((file) => !gitIgnoreFiles.includes(file));
-            const filesIgnored = lengthBefore - filesToCheck.length;
-            coreExports.info(`Files Ignored: ${filesIgnored}`);
+            missedFiles.push(file);
         }
-        coreExports.endGroup();
+    });
+    coreExports.info(`${missedFiles.length} files missing codeowners`);
+    if (coreExports.isDebug()) {
+        coreExports.debug(JSON.stringify(missedFiles));
     }
+    coreExports.endGroup();
     coreExports.startGroup('Checking CODEOWNERS Coverage');
-    const filesNotCovered = filesToCheck.filter((file) => !codeownersFiles.includes(file));
-    const amountCovered = filesToCheck.length - filesNotCovered.length;
+    const amountCovered = filesToCheck.length - missedFiles.length;
     const coveragePercent = filesToCheck.length === 0
         ? 100
         : (amountCovered / filesToCheck.length) * 100;
@@ -29824,14 +29890,27 @@ const runAction = async (input) => {
     });
     coreExports.endGroup();
     coreExports.startGroup('Annotating files');
-    filesNotCovered.forEach((file) => coreExports.error(`File not covered by CODEOWNERS: ${file}`, {
+    missedFiles.forEach((file) => coreExports.error(`File not covered by CODEOWNERS: ${file}`, {
         title: 'File mssing in CODEOWNERS',
         file: file,
     }));
-    coreExports.endGroup();
-    if (filesNotCovered.length > 0) {
-        coreExports.setFailed(`${filesNotCovered.length}/${filesToCheck.length} files not covered in CODEOWNERS`);
+    if (missedFiles.length > 0) {
+        coreExports.setFailed(`${missedFiles.length}/${filesToCheck.length} files not covered in CODEOWNERS`);
     }
+    if (input.allRulesMustHit) {
+        const unusedRules = rulesResult.filter(({ filtes }) => filtes.length === 0);
+        if (unusedRules.length > 0) {
+            coreExports.setFailed(`${unusedRules.length} rules not used`);
+        }
+        unusedRules.forEach(({ rule }) => {
+            coreExports.error(`Rule not used: ${rule.pattern}`, {
+                title: 'Rule not used',
+                file: 'CODEOWNERS',
+                startLine: rule.lineNumber,
+            });
+        });
+    }
+    coreExports.endGroup();
 };
 async function run() {
     const input = getInputs();
