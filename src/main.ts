@@ -107,7 +107,6 @@ export const runAction = async (input: Input): Promise<void> => {
       file: file,
     }),
   );
-  core.endGroup();
   if (missedFiles.length > 0) {
     core.setFailed(
       `${missedFiles.length}/${filesToCheck.length} files not covered in CODEOWNERS`,
@@ -126,6 +125,7 @@ export const runAction = async (input: Input): Promise<void> => {
       });
     });
   }
+  core.endGroup();
 };
 
 export async function run(): Promise<void> {
