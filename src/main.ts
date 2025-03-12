@@ -29,7 +29,9 @@ export const runAction = async (input: Input): Promise<void> => {
   let filesToCheck: string[] = [];
   core.startGroup(`Loading files to check.`);
   if (input.files) {
-    filesToCheck = input.files.split(' ').map((file) => file.startsWith('/') ? file : `/${file}`);
+    filesToCheck = input.files
+      .split(' ')
+      .map((file) => (file.startsWith('/') ? file : `/${file}`));
   } else {
     filesToCheck = await (await glob.create('*')).glob();
     if (input['include-gitignore'] === true) {
