@@ -7,9 +7,10 @@
 [![Coverage](./badges/coverage.svg)](./badges/coverage.svg)
 
 This action can:
-* Check if all files are covered by a CODEOWNERS Rule
-* Check if all modified files are covered by a CODEOWNERS Rule. (PR)
-* Check if all CODEOWNER rules are used.
+
+- Check if all files are covered by a CODEOWNERS Rule
+- Check if all modified files are covered by a CODEOWNERS Rule. (PR)
+- Check if all CODEOWNER rules are used.
 
 ## Examples
 
@@ -62,8 +63,8 @@ jobs:
           ignoreDefault: 'false'
 ```
 
-
 ### Outputs example
+
 ```yaml
 steps:
   - uses: actions/checkout@v4
@@ -78,7 +79,7 @@ steps:
     run: echo "${{ steps.codeowners.outputs.missedFiles }}"
 ```
 
-
 ### Contributing
 
-See: https://github.com/actions/typescript-action on how to run, test and contribute to github actions.
+See: https://github.com/actions/typescript-action on how to run, test and
+contribute to github actions.
