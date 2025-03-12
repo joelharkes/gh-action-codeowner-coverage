@@ -29825,7 +29825,8 @@ const runAction = async (input) => {
             .map((file) => (file.startsWith('/') ? file : `/${file}`));
     }
     else {
-        filesToCheck = await (await globExports.create('*')).glob();
+        // glob all files except .git folder
+        filesToCheck = await (await globExports.create('*\n!.git/**')).glob();
         if (input['includeGitignore'] === true) {
             coreExports.info('Ignoring .gitignored files');
             let gitIgnoreFiles = [];
